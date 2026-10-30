@@ -3,9 +3,7 @@ package first.robot.subsystems;
 import static org.wpilib.units.Units.Degree;
 
 import org.wpilib.command2.SubsystemBase;
-import org.wpilib.command2.sysid.SysIdRoutine;
 import org.wpilib.driverstation.Alliance;
-import org.wpilib.driverstation.DriverStation;
 import org.wpilib.driverstation.MatchState;
 import org.wpilib.math.estimator.SwerveDrivePoseEstimator;
 import org.wpilib.math.geometry.Pose2d;
@@ -17,17 +15,22 @@ import org.wpilib.math.kinematics.SwerveDriveOdometry;
 import org.wpilib.math.kinematics.SwerveModulePosition;
 import org.wpilib.math.kinematics.SwerveModuleVelocity;
 import org.wpilib.math.linalg.VecBuilder;
+import org.wpilib.networktables.NetworkTableInstance;
 import org.wpilib.networktables.StructArrayPublisher;
+import org.wpilib.networktables.StructPublisher;
 import org.wpilib.system.Timer;
 import org.wpilib.telemetry.Telemetry;
 
 import com.ctre.phoenix6.hardware.Pigeon2;
+import com.limelightvision.Limelight;
+import com.limelightvision.PoseEstimate;
+import com.limelightvision.PoseEstimateType;
 import com.pathplanner.lib.auto.AutoBuilder;
 import com.pathplanner.lib.config.PIDConstants;
 import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 
-import first.robot.RobotContainer;
 import first.robot.swerve.Swerve.Constants;
+import first.robot.utility.Util;
 import first.robot.swerve.Module;
 
 public class Swerve extends SubsystemBase {
@@ -37,17 +40,21 @@ public class Swerve extends SubsystemBase {
 
     public final Pigeon2 pigeon2 = new Pigeon2(Constants.PIGEON_ID, first.robot.swerve.Swerve.getBus());
 
-    // TODO publish data
-    // StructArrayPublisher<SwerveModuleVelocity> current_states = Util.table
-    //         .getStructArrayTopic("Current Module States", SwerveModuleVelocity.struct).publish();
-    // StructArrayPublisher<SwerveModuleVelocity> target_states = Util.table
-    //         .getStructArrayTopic("Target Module States", SwerveModuleVelocity.struct).publish();
-    // StructPublisher<Pose2d> posePublisher = NetworkTableInstance.getDefault().getTable("Debug")
-    //         .getStructTopic("Current pose", Pose2d.struct).publish();
-    // StructPublisher<Pose2d> estimatedPublisher = NetworkTableInstance.getDefault().getTable("Debug")
-    //         .getStructTopic("Estimated pose", Pose2d.struct).publish();
-    // StructPublisher<Pose2d> estimatedPublisherWithYaw = NetworkTableInstance.getDefault().getTable("Debug")
-    //         .getStructTopic("Estimated pose with yaw", Pose2d.struct).publish();
+    StructArrayPublisher<SwerveModuleVelocity> current_states = Util.table
+    .getStructArrayTopic("Current Module States",
+    SwerveModuleVelocity.struct).publish();
+    StructArrayPublisher<SwerveModuleVelocity> target_states = Util.table
+    .getStructArrayTopic("Target Module States",
+    SwerveModuleVelocity.struct).publish();
+    StructPublisher<Pose2d> posePublisher =
+    NetworkTableInstance.getDefault().getTable("Debug")
+    .getStructTopic("Current Pose", Pose2d.struct).publish();
+    StructPublisher<Pose2d> estimatedPublisher =
+    NetworkTableInstance.getDefault().getTable("Debug")
+    .getStructTopic("Estimated Pose", Pose2d.struct).publish();
+    StructPublisher<Pose2d> estimatedPublisherWithYaw =
+    NetworkTableInstance.getDefault().getTable("Debug")
+    .getStructTopic("Estimated Pose with Yaw", Pose2d.struct).publish();
 
     SwerveDrivePoseEstimator estimator;
     SwerveDrivePoseEstimator estimatorWithYaw;
@@ -58,15 +65,9 @@ public class Swerve extends SubsystemBase {
     public final Constants constants = new Constants();
     Timer timer = new Timer();
 
+    Limelight limelight = new Limelight("limelight-main");
+
     public boolean active = true;
-
-    public static enum swerveState {
-        DEFAULT, SCORING, SCORINGAIMBOT, PASSING
-    }
-
-    public Double targetRotation = null;
-
-    public swerveState currentState = swerveState.DEFAULT;
 
     public Swerve() {
         kinematics = new SwerveDriveKinematics(
@@ -90,15 +91,15 @@ public class Swerve extends SubsystemBase {
         estimatorWithYaw = new SwerveDrivePoseEstimator(kinematics, rotation(), modulePositions(), odometry.getPose());
 
         AutoBuilder.configure(
-                this::pose, // See how using pose estimation affects auton.
+                this::pose,
                 this::resetOdometry,
                 this::getSpeeds,
                 (speeds, feedforwards) -> drive(speeds),
                 new PPHolonomicDriveController(
-                        new PIDConstants(2.5, 0.0, 0.0), // Translation PID constants
-                        new PIDConstants(0.0, 0.0, 0.0) // Rotation PID constants
+                        new PIDConstants(2.5, 0.0, 0.0),
+                        new PIDConstants(0.0, 0.0, 0.0)
                 ),
-                constants.autoConfig, // The robot configuration
+                constants.autoConfig,
                 () -> {
                     var alliance = MatchState.getAlliance();
                     return alliance.isPresent() && alliance.get() == Alliance.RED;
@@ -106,10 +107,6 @@ public class Swerve extends SubsystemBase {
                 this);
 
         timer.start();
-    }
-
-    private Translation2d createTranslation(double x, double y) {
-        return new Translation2d(x, y);
     }
 
     public void resetAngle() {
@@ -199,42 +196,6 @@ public class Swerve extends SubsystemBase {
         return state;
     }
 
-    final MutDistance[] distance = { Meters.mutable(0), Meters.mutable(0), Meters.mutable(0), Meters.mutable(0) };
-    final MutAngle[] angle = { Radians.mutable(0), Radians.mutable(0), Radians.mutable(0), Radians.mutable(0) };
-
-    public final SysIdRoutine driveRoutine = new SysIdRoutine(new Config(
-            null,
-            Volts.of(3),
-            // Seconds.of(5),
-            null,
-            null),
-            new SysIdRoutine.Mechanism(voltage -> {
-                for (Module mod : modules)
-                    mod.set(voltage.magnitude(), 0);
-            }, log -> {
-                log.motor(Constants.LAYOUT_TITLE[0] + " [Drive]")
-                        .voltage(modules[0].voltage())
-                        .linearPosition(distance[0].mut_replace(modules[0].drivePosition(), Meters))
-                        .linearVelocity(modules[0].velocity())
-                        .linearAcceleration(pigeon2.getAccelerationX().getValue()); // NOTE: This is due to our gyro
-                                                                                    // being mounted 90 degrees off
-                                                                                    // centre
-            }, this));
-
-    public final SysIdRoutine steerRoutine = new SysIdRoutine(new Config(
-            null,
-            Volts.of(2),
-            null,
-            null),
-            new SysIdRoutine.Mechanism(voltage -> {
-                speeds = new ChassisSpeeds(0, 0, (voltage.magnitude() / 16.0) * Constants.MAX_ANGULAR_VELOCITY);
-            }, log -> {
-                log.motor("Chassis")
-                        .voltage(modules[0].steerVoltage())
-                        .angularPosition(pigeon2.getYaw().getValue())
-                        .angularVelocity(pigeon2.getAngularVelocityYWorld().getValue());
-            }, this));
-
     public double getRoll() {
         return pigeon2.getRoll().getValueAsDouble();
     }
@@ -246,23 +207,23 @@ public class Swerve extends SubsystemBase {
             mod.stop();
     }
 
-    public void estimatePose(String limelight) {
+    public void estimatePose(Limelight limelight) {
         estimator.update(rotation(), modulePositions());
         estimatorWithYaw.update(rotation(), modulePositions());
-        LimelightHelpers.SetRobotOrientation(limelight, pigeon2.getYaw().getValueAsDouble(), 0,
-                pigeon2.getPitch().getValueAsDouble(), 0, pigeon2.getRoll().getValueAsDouble(), 0);
-        LimelightHelpers.PoseEstimate mt1 = LimelightHelpers.getBotPoseEstimate_wpiBlue(limelight);
+        limelight.setRobotOrientation(pigeon2.getYaw().getValueAsDouble(), 0, pigeon2.getPitch().getValueAsDouble(), 0, pigeon2.getRoll().getValueAsDouble(), 0, false);
+        PoseEstimate mt1 = limelight.getPoseEstimate(PoseEstimateType.MT1_WPIBLUE);
+
         boolean doRejectUpdate = false;
 
-        if (mt1.tagCount == 1 && mt1.rawFiducials.length == 1) {
+        if (mt1.reportedTagCount == 1 && mt1.rawFiducials.length == 1) {
             if (mt1.rawFiducials[0].ambiguity > .30) {
                 doRejectUpdate = true;
             }
-            if (mt1.rawFiducials[0].distToCamera > 3) {
+            if (mt1.rawFiducials[0].getDistanceToCamera() > 3) {
                 doRejectUpdate = true;
             }
         }
-        if (mt1.tagCount == 0) {
+        if (mt1.reportedTagCount == 0) {
             doRejectUpdate = true;
         }
 
@@ -289,7 +250,7 @@ public class Swerve extends SubsystemBase {
         return estimatorWithYaw.getEstimatedPosition();
     }
 
-    public double getEstimatedRotation(){
+    public double getEstimatedRotation() {
         return getEstimatedPoseWithYaw().getRotation().getDegrees();
     }
 
@@ -302,9 +263,7 @@ public class Swerve extends SubsystemBase {
         target_states.set(states);
 
         Pose2d pose = odometry.update(rotation(), modulePositions());
-        // TODO During field calibartion test the fused estimation
-        estimatePose("limelight-intake");
-        estimatePose("limelight-main");
+        estimatePose(limelight);
         posePublisher.set(pose);
         estimatedPublisher.set(estimator.getEstimatedPosition());
         estimatedPublisherWithYaw.set(estimatorWithYaw.getEstimatedPosition());
@@ -313,7 +272,7 @@ public class Swerve extends SubsystemBase {
 
         if ((int) (timer.get()) >= 5) {
             syncEncoders();
-            
+
             timer.restart();
         }
 
@@ -326,11 +285,5 @@ public class Swerve extends SubsystemBase {
                 pigeon2.getRoll().getValueAsDouble());
 
         Telemetry.log("Drive Mode", (field_oritented) ? "Field-Oriented" : "Robot-Oriented");
-
-        if (targetRotation != null)
-            Telemetry.log("Target Rotation", targetRotation * 360);
-        else
-            Telemetry.log("Target Rotation", 0.0);
-        Telemetry.log("Robot State", currentState.toString());
     }
 }

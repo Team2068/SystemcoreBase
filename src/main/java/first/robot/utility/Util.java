@@ -7,8 +7,12 @@ import org.wpilib.command2.Commands;
 import org.wpilib.command2.ConditionalCommand;
 import org.wpilib.command2.InstantCommand;
 import org.wpilib.command2.Subsystem;
+import org.wpilib.networktables.NetworkTable;
+import org.wpilib.networktables.NetworkTableInstance;
 
 public class Util {
+    public static NetworkTable table = NetworkTableInstance.getDefault().getTable("Debug");
+
     public static InstantCommand Do(Runnable action, Subsystem... systems) {
         return new InstantCommand(action, systems);
     }

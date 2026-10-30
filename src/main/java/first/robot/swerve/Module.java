@@ -4,7 +4,6 @@ import static org.wpilib.units.Units.MetersPerSecond;
 
 import org.wpilib.math.util.MathUtil;
 import org.wpilib.math.util.Units;
-import org.wpilib.telemetry.TelemetryTable;
 import org.wpilib.units.measure.AngularVelocity;
 import org.wpilib.units.measure.LinearVelocity;
 import org.wpilib.units.measure.Voltage;
