@@ -3,10 +3,10 @@ package first.robot.utility;
 import org.wpilib.command2.SubsystemBase;
 import first.robot.subsystems.Swerve;
 
-public class IO extends SubsystemBase {
+public class SubsystemManager extends SubsystemBase {
         public final Swerve chassis = new Swerve();
         
-        public IO() {}
+        public SubsystemManager() {}
 
         @Override
         public void periodic() {}
