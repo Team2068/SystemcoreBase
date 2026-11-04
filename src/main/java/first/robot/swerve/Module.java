@@ -14,6 +14,8 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
+import first.robot.swerve.Swerve.Constants;
+
 
 public class Module {
     public final TalonFX drive;
@@ -27,8 +29,8 @@ public class Module {
     public static final double STEER_REDUCTION = 26.09;
 
     public Module(int driveID, int steerID, int encoderID) {
-        drive = new TalonFX(driveID, Swerve.getBus());
-        steer = new TalonFX(steerID, Swerve.getBus());
+        drive = new TalonFX(driveID, Constants.getSwerveBus());
+        steer = new TalonFX(steerID, Constants.getSwerveBus());
         encoder = new Swerve.Canand(encoderID);
 
         TalonFXConfiguration steerConfig = new TalonFXConfiguration();
@@ -49,7 +51,7 @@ public class Module {
         steerConfig.Feedback.SensorToMechanismRatio = STEER_REDUCTION;
         
         steer.getConfigurator().apply(steerConfig);
-        steer.setPosition(angle() / Swerve.PI2);
+        steer.setPosition(angle() / Constants.PI2);
 
         TalonFXConfiguration driveConfig = new TalonFXConfiguration();
 
@@ -66,7 +68,7 @@ public class Module {
         drive.getConfigurator().apply(driveConfig);
 
 
-        // Find alternative to Shuffleboard tab to log module data
+        // TODO Find alternative to Shuffleboard tab to log module data
     }
 
     public void resetDrivePosition() {
@@ -74,7 +76,7 @@ public class Module {
     }
 
     public void syncEncoders() {
-        steer.setPosition(encoder.angle() / Swerve.PI2);
+        steer.setPosition(encoder.angle() / Constants.PI2);
     }
 
     public void zeroAbsolute() {
@@ -86,7 +88,7 @@ public class Module {
     }
 
     public LinearVelocity velocity() {
-        return MetersPerSecond.of(drive.getVelocity().getValueAsDouble() * Swerve.PI2 * .500 * WHEEL_DIAMETER);
+        return MetersPerSecond.of(drive.getVelocity().getValueAsDouble() * Constants.PI2 * .500 * WHEEL_DIAMETER);
     }
 
     public Voltage voltage(){
@@ -111,9 +113,9 @@ public class Module {
     }
 
     public void set(double driveVolts, double targetAngle) {
-        double normalized = MathUtil.inputModulus(targetAngle, 0, Swerve.PI2);
+        double normalized = MathUtil.inputModulus(targetAngle, 0, Constants.PI2);
         drive.setThrottle(driveVolts);
-        steer.setControl(positionRequest.withPosition(normalized / Swerve.PI2));
+        steer.setControl(positionRequest.withPosition(normalized / Constants.PI2));
     }
 
     public void setSteer(double steerVolts){

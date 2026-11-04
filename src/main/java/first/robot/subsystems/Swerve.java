@@ -34,27 +34,25 @@ import first.robot.utility.Util;
 import first.robot.swerve.Module;
 
 public class Swerve extends SubsystemBase {
-
     public boolean field_oritented = true;
     private final SwerveDriveKinematics kinematics;
 
-    public final Pigeon2 pigeon2 = new Pigeon2(Constants.PIGEON_ID, first.robot.swerve.Swerve.getBus());
+    public final Pigeon2 pigeon2 = new Pigeon2(Constants.PIGEON_ID, Constants.getSwerveBus());
 
     StructArrayPublisher<SwerveModuleVelocity> current_states = Util.table
-    .getStructArrayTopic("Current Module States",
-    SwerveModuleVelocity.struct).publish();
+            .getStructArrayTopic("Current Module States",
+                    SwerveModuleVelocity.struct)
+            .publish();
     StructArrayPublisher<SwerveModuleVelocity> target_states = Util.table
-    .getStructArrayTopic("Target Module States",
-    SwerveModuleVelocity.struct).publish();
-    StructPublisher<Pose2d> posePublisher =
-    NetworkTableInstance.getDefault().getTable("Debug")
-    .getStructTopic("Current Pose", Pose2d.struct).publish();
-    StructPublisher<Pose2d> estimatedPublisher =
-    NetworkTableInstance.getDefault().getTable("Debug")
-    .getStructTopic("Estimated Pose", Pose2d.struct).publish();
-    StructPublisher<Pose2d> estimatedPublisherWithYaw =
-    NetworkTableInstance.getDefault().getTable("Debug")
-    .getStructTopic("Estimated Pose with Yaw", Pose2d.struct).publish();
+            .getStructArrayTopic("Target Module States",
+                    SwerveModuleVelocity.struct)
+            .publish();
+    StructPublisher<Pose2d> posePublisher = NetworkTableInstance.getDefault().getTable("Debug")
+            .getStructTopic("Current Pose", Pose2d.struct).publish();
+    StructPublisher<Pose2d> estimatedPublisher = NetworkTableInstance.getDefault().getTable("Debug")
+            .getStructTopic("Estimated Pose", Pose2d.struct).publish();
+    StructPublisher<Pose2d> estimatedPublisherWithYaw = NetworkTableInstance.getDefault().getTable("Debug")
+            .getStructTopic("Estimated Pose with Yaw", Pose2d.struct).publish();
 
     SwerveDrivePoseEstimator estimator;
     SwerveDrivePoseEstimator estimatorWithYaw;
@@ -63,7 +61,7 @@ public class Swerve extends SubsystemBase {
     final Module[] modules = new Module[4];
     ChassisVelocities speeds = new ChassisVelocities();
     public final Constants constants = new Constants();
-    Timer timer = new Timer();
+    Timer encoderSyncTimer = new Timer();
 
     Limelight limelight = new Limelight("limelight-main");
 
@@ -71,12 +69,11 @@ public class Swerve extends SubsystemBase {
 
     public Swerve() {
         kinematics = new SwerveDriveKinematics(
-                new Translation2d(constants.TRACKWIDTH / 2.0, constants.WHEELBASE / 2.0),
-                new Translation2d(constants.TRACKWIDTH / 2.0, -constants.WHEELBASE / 2.0),
-                new Translation2d(-constants.TRACKWIDTH / 2.0, constants.WHEELBASE / 2.0),
-                new Translation2d(-constants.TRACKWIDTH / 2.0, -constants.WHEELBASE / 2.0));
+                new Translation2d(Constants.TRACKWIDTH / 2.0, Constants.WHEELBASE / 2.0),
+                new Translation2d(Constants.TRACKWIDTH / 2.0, -Constants.WHEELBASE / 2.0),
+                new Translation2d(-Constants.TRACKWIDTH / 2.0, Constants.WHEELBASE / 2.0),
+                new Translation2d(-Constants.TRACKWIDTH / 2.0, -Constants.WHEELBASE / 2.0));
 
-        // ShuffleboardTab tab = Shuffleboard.getTab("Drivetrain");
         for (int i = 0; i < modules.length; i++) {
             modules[i] = new Module(
                     Constants.DRIVE_ID[i],
@@ -97,8 +94,7 @@ public class Swerve extends SubsystemBase {
                 (speeds, feedforwards) -> drive(speeds),
                 new PPHolonomicDriveController(
                         new PIDConstants(2.5, 0.0, 0.0),
-                        new PIDConstants(0.0, 0.0, 0.0)
-                ),
+                        new PIDConstants(0.0, 0.0, 0.0)),
                 constants.autoConfig,
                 () -> {
                     var alliance = MatchState.getAlliance();
@@ -106,7 +102,7 @@ public class Swerve extends SubsystemBase {
                 },
                 this);
 
-        timer.start();
+        encoderSyncTimer.start();
     }
 
     public void resetAngle() {
@@ -117,10 +113,6 @@ public class Swerve extends SubsystemBase {
         double rotation = (pigeon2.getYaw().getValueAsDouble() + 90) % 360;
         rotation += (rotation < 0) ? 360 : 0;
         return new Rotation2d(Degree.of(rotation - 180));
-    }
-
-    public void adjustRotation() {
-        pigeon2.setYaw((rotation().getDegrees() + 90) % 360);
     }
 
     public void drive(ChassisVelocities speeds) {
@@ -140,10 +132,6 @@ public class Swerve extends SubsystemBase {
         for (int i = 0; i < 4; i++)
             pos[i] = new SwerveModulePosition(modules[i].drivePosition(), Rotation2d.fromRadians(modules[i].angle()));
         return pos;
-    }
-
-    public double getYaw() {
-        return (pigeon2.getYaw().getValueAsDouble() % 360 + 360) % 360;
     }
 
     public Pose2d pose() {
@@ -196,8 +184,16 @@ public class Swerve extends SubsystemBase {
         return state;
     }
 
+    public double getPitch() {
+        return (pigeon2.getPitch().getValueAsDouble() % 360 + 360) % 360;
+    }
+
     public double getRoll() {
-        return pigeon2.getRoll().getValueAsDouble();
+        return (pigeon2.getRoll().getValueAsDouble() % 360 + 360) % 360;
+    }
+
+    public double getYaw() {
+        return (pigeon2.getYaw().getValueAsDouble() % 360 + 360) % 360;
     }
 
     public void toggle() {
@@ -210,24 +206,25 @@ public class Swerve extends SubsystemBase {
     public void estimatePose(Limelight limelight) {
         estimator.update(rotation(), modulePositions());
         estimatorWithYaw.update(rotation(), modulePositions());
-        limelight.setRobotOrientation(pigeon2.getYaw().getValueAsDouble(), 0, pigeon2.getPitch().getValueAsDouble(), 0, pigeon2.getRoll().getValueAsDouble(), 0, false);
+        limelight.setRobotOrientation(pigeon2.getYaw().getValueAsDouble(), 0, pigeon2.getPitch().getValueAsDouble(), 0,
+                pigeon2.getRoll().getValueAsDouble(), 0, false);
         PoseEstimate mt1 = limelight.getPoseEstimate(PoseEstimateType.MT1_WPIBLUE);
 
-        boolean doRejectUpdate = false;
+        boolean rejectUpdate = false;
 
         if (mt1.reportedTagCount == 1 && mt1.rawFiducials.length == 1) {
             if (mt1.rawFiducials[0].ambiguity > .30) {
-                doRejectUpdate = true;
+                rejectUpdate = true;
             }
             if (mt1.rawFiducials[0].getDistanceToCamera() > 3) {
-                doRejectUpdate = true;
+                rejectUpdate = true;
             }
         }
         if (mt1.reportedTagCount == 0) {
-            doRejectUpdate = true;
+            rejectUpdate = true;
         }
 
-        if (!doRejectUpdate) {
+        if (!rejectUpdate) {
             estimator.setVisionMeasurementStdDevs(VecBuilder.fill(.05, .07, 9999999));
             estimatorWithYaw.setVisionMeasurementStdDevs(VecBuilder.fill(.05, .07, 0.5));
             estimator.addVisionMeasurement(
@@ -250,7 +247,7 @@ public class Swerve extends SubsystemBase {
         return estimatorWithYaw.getEstimatedPosition();
     }
 
-    public double getEstimatedRotation() {
+    public double getEstimatedYaw() {
         return getEstimatedPoseWithYaw().getRotation().getDegrees();
     }
 
@@ -268,21 +265,17 @@ public class Swerve extends SubsystemBase {
         estimatedPublisher.set(estimator.getEstimatedPosition());
         estimatedPublisherWithYaw.set(estimatorWithYaw.getEstimatedPosition());
 
-        Telemetry.log("Timer", timer.get());
-
-        if ((int) (timer.get()) >= 5) {
+        Telemetry.log("Encoder Sync Timer", encoderSyncTimer.get());
+        if ((int) (encoderSyncTimer.get()) >= 5) {
             syncEncoders();
-
-            timer.restart();
+            encoderSyncTimer.restart();
         }
 
-        Telemetry.log("Limelight Estimated Rotation", getEstimatedRotation());
+        Telemetry.log("Limelight Estimated Rotation", getEstimatedYaw());
         Telemetry.log("Odometry rotation", rotation().getDegrees());
         Telemetry.log("Pigeon Yaw", getYaw());
-        Telemetry.log("Pigeon Pitch",
-                pigeon2.getPitch().getValueAsDouble());
-        Telemetry.log("Pigeon Roll",
-                pigeon2.getRoll().getValueAsDouble());
+        Telemetry.log("Pigeon Pitch", getPitch());
+        Telemetry.log("Pigeon Roll", getRoll());
 
         Telemetry.log("Drive Mode", (field_oritented) ? "Field-Oriented" : "Robot-Oriented");
     }

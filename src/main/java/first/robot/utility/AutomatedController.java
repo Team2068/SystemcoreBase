@@ -20,8 +20,7 @@ public class AutomatedController {
 
         selector.addDefault("Automated", () -> {mode = 0;});
         selector.addDefault("Manual", () -> {mode = 1;});
-        selector.add("Characterise", () -> {mode = 2;});
-        selector.addDefault("Debug", () -> {mode = 3;});
+        selector.addDefault("Debug", () -> {mode = 2;});
 
         selector.onChange((x) -> {
             x.run();

@@ -33,7 +33,7 @@ public class DriveCommand extends Command {
                 () -> -modifyAxis(controller.getLeftX()) * Swerve.Constants.MAX_VELOCITY,
                 () -> -modifyAxis(controller.getRightX()) * Swerve.Constants.MAX_ANGULAR_VELOCITY);
         this.controller = controller;
-    }
+  }
 
   @Override
   public void execute() {

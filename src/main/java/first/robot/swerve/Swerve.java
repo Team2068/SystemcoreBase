@@ -12,17 +12,14 @@ import java.io.IOException;
 import org.wpilib.units.measure.AngularVelocity;
 
 public class Swerve {
-    public static final double PI2 = 2.0 * Math.PI;
-    private static CANBus swerveBus = new CANBus("Swerve");
-
     public static class Constants {
-        // BOT SWITCHING
-        public boolean heliumEncoders = true;
+        public static final double PI2 = 2.0 * Math.PI;
 
-        public double TRACKWIDTH = 27; // 30.0 for MKi
-        public double WHEELBASE = 27; // 30.0 for MKi
-        public double GEAR_RATIO = 8.14;
-        public double WHEEL_RADIUS = .1143;
+        // CHASSIS AND MODULE CONSTANTS
+        public static final double TRACKWIDTH = 27;
+        public static final double WHEELBASE = 27;
+        public static final double GEAR_RATIO = 8.14;
+        public static final double WHEEL_RADIUS = .1143;
 
         // DRIVER SETTINGS
         public static int driver = 0;
@@ -43,8 +40,8 @@ public class Swerve {
         public static final int[] DRIVE_ID = { 4, 2, 5, 3 }; // FL, FR, BL, BR
         public static final int[] STEER_ID = { 9, 7, 10, 8 }; // FL, FR, BL, BR
         public static final int[] ENCODER_ID = { 13, 11, 14, 12 }; // FL, FR, BL, BR
-        public static double[] ENCODER_OFFSETS = { -0.87890625, -0.996337890625, -0.638427734375, -0.892822265625 };
         public static final int PIGEON_ID = 6;
+        private static CANBus swerveBus = new CANBus("Swerve");
 
         public Constants() {
             try {
@@ -63,6 +60,10 @@ public class Swerve {
                     break;
             }
         }
+
+        public static CANBus getSwerveBus() {
+            return swerveBus;
+        }
     }
 
     public interface Encoder {
@@ -73,13 +74,7 @@ public class Swerve {
         public double angle();
 
         public AngularVelocity velocity();
-
     }
-
-    // TODO Add Cancoder support
-    // public static class Cancoder implements Encoder {
-
-    // }
 
     public static class Canand implements Encoder {
         Canandmag encoder;
@@ -101,15 +96,11 @@ public class Swerve {
         }
 
         public double angle() {
-            return (encoder.getAbsPosition() * PI2) % PI2;
+            return (encoder.getAbsPosition() * Constants.PI2) % Constants.PI2;
         }
 
         public AngularVelocity velocity() {
             return RadiansPerSecond.of(encoder.getVelocity());
         }
-    }
-
-    public static CANBus getBus() {
-        return swerveBus;
     }
 }
